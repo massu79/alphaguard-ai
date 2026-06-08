@@ -1,6 +1,8 @@
 # AlphaGuard AI
 
-Initial FastAPI MVP for AlphaGuard AI, a lightweight API surface for risk assessment workflows.
+Human-approved AI agent for on-chain alpha detection and risk alerts.
+
+This repository starts with a FastAPI MVP: a lightweight API surface for risk assessment workflows.
 
 ## Features
 
