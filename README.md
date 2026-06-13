@@ -111,6 +111,38 @@ curl -X POST http://127.0.0.1:8000/api/v1/backtests/run `
 
 The endpoint returns trade events and summary metrics such as ending equity, total return, max drawdown, and trade count.
 
+## Market Data Provider Foundation
+
+The market data API provides the first swappable provider boundary for real on-chain data. The default `fixture` provider is local and deterministic; the `indexer` provider expects a normalized HTTP API at `ALPHAGUARD_MARKET_DATA_BASE_URL`.
+
+Fetch fixture candles:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/api/v1/market-data/candles `
+  -H "Content-Type: application/json" `
+  -d "{\"chain_id\":11155111,\"pool_address\":\"0xpool\",\"asset\":\"WETH/USDC\",\"interval\":\"1h\",\"limit\":8,\"provider\":\"fixture\"}"
+```
+
+Expected normalized indexer response shape:
+
+```json
+{
+  "candles": [
+    {
+      "timestamp": 1717200000,
+      "open": 100,
+      "high": 110,
+      "low": 95,
+      "close": 105,
+      "volume": 1234,
+      "block_number": 12345678
+    }
+  ]
+}
+```
+
+To swap in an indexer, set `ALPHAGUARD_MARKET_DATA_PROVIDER=indexer` and provide `ALPHAGUARD_MARKET_DATA_BASE_URL`. The indexer adapter reads data only; it does not build or submit transactions.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and adjust values as needed.
@@ -123,6 +155,9 @@ Copy `.env.example` to `.env` and adjust values as needed.
 | `ALPHAGUARD_CORS_ORIGINS` | `[]` | Comma-separated CORS origins |
 | `ALPHAGUARD_TRADING_MODE` | `backtest` | Runtime trading mode; keep `backtest` for local MVP work |
 | `ALPHAGUARD_TESTNET_RPC_URL` | `None` | Reserved for future testnet data provider work |
+| `ALPHAGUARD_MARKET_DATA_PROVIDER` | `fixture` | Candle provider: `fixture` or `indexer` |
+| `ALPHAGUARD_MARKET_DATA_BASE_URL` | `None` | Base URL for a normalized candle indexer |
+| `ALPHAGUARD_MARKET_DATA_API_KEY` | `None` | Optional bearer token for the indexer provider |
 | `ALPHAGUARD_PRODUCTION_TRADING_ENABLED` | `false` | Reserved kill switch; production trading is not implemented |
 
 ## Testing
