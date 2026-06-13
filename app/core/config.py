@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     environment: str = "local"
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = Field(default_factory=list)
+    trading_mode: str = "backtest"
+    testnet_rpc_url: str | None = None
+    production_trading_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
