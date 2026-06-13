@@ -1,7 +1,8 @@
+import httpx
 from fastapi import APIRouter, HTTPException, status
 
-from app.models.market_data import CandleQuery, CandleResponse
-from app.services.market_data import provider_for_query
+from app.models.market_data import CandleQuery, CandleResponse, PairMarketData, PairQuery
+from app.services.market_data import DexScreenerProvider, provider_for_query
 
 router = APIRouter()
 
@@ -14,4 +15,17 @@ def get_candles(payload: CandleQuery) -> CandleResponse:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
+        ) from exc
+
+
+@router.post("/pair", response_model=PairMarketData)
+def get_pair(payload: PairQuery) -> PairMarketData:
+    try:
+        return DexScreenerProvider().get_pair(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"DexScreener request failed: {exc}",
         ) from exc

@@ -8,6 +8,7 @@ from app.models.backtest import Candle
 class MarketDataProviderName(StrEnum):
     fixture = "fixture"
     indexer = "indexer"
+    dexscreener = "dexscreener"
 
 
 class CandleInterval(StrEnum):
@@ -34,3 +35,48 @@ class CandleResponse(BaseModel):
     interval: CandleInterval
     provider: MarketDataProviderName
     candles: list[Candle]
+
+
+class PairQuery(BaseModel):
+    chain_slug: str = Field(..., min_length=1, examples=["ethereum"])
+    pair_address: str = Field(
+        ...,
+        min_length=1,
+        examples=["0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"],
+    )
+
+
+class TokenInfo(BaseModel):
+    address: str | None = None
+    name: str | None = None
+    symbol: str | None = None
+
+
+class PairLiquidity(BaseModel):
+    usd: float | None = None
+    base: float | None = None
+    quote: float | None = None
+
+
+class PairTransactions(BaseModel):
+    buys: int = 0
+    sells: int = 0
+
+
+class PairMarketData(BaseModel):
+    provider: MarketDataProviderName = MarketDataProviderName.dexscreener
+    chain_slug: str
+    dex_id: str | None = None
+    pair_address: str
+    url: str | None = None
+    base_token: TokenInfo
+    quote_token: TokenInfo
+    price_native: float | None = None
+    price_usd: float | None = None
+    liquidity: PairLiquidity | None = None
+    volume: dict[str, float] = Field(default_factory=dict)
+    price_change: dict[str, float] = Field(default_factory=dict)
+    txns: dict[str, PairTransactions] = Field(default_factory=dict)
+    fdv: float | None = None
+    market_cap: float | None = None
+    pair_created_at: int | None = None

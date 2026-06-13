@@ -143,6 +143,20 @@ Expected normalized indexer response shape:
 
 To swap in an indexer, set `ALPHAGUARD_MARKET_DATA_PROVIDER=indexer` and provide `ALPHAGUARD_MARKET_DATA_BASE_URL`. The indexer adapter reads data only; it does not build or submit transactions.
 
+## Live Pair Data With DexScreener
+
+The MVP can also read live pair metrics from DexScreener without an API key. This is read-only market data for display and analysis; it is not trading infrastructure.
+
+Example request for the Ethereum Uniswap V2 WETH/USDC pair:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/api/v1/market-data/pair `
+  -H "Content-Type: application/json" `
+  -d "{\"chain_slug\":\"ethereum\",\"pair_address\":\"0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc\"}"
+```
+
+The response includes token symbols, USD price, liquidity, volume, transaction counts, price changes, and pair metadata where available.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and adjust values as needed.
