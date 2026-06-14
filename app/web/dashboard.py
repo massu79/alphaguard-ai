@@ -229,7 +229,7 @@ DASHBOARD_HTML = """
           </div>
           <div class="chart-wrap">
             <div class="chart-toolbar">
-              <strong id="chartTitle">WETH/USDC · 1H</strong>
+              <strong id="chartTitle">WETH/USDC - 1H</strong>
               <span class="chart-badge">Candles + volume</span>
             </div>
             <canvas id="priceChart" width="900" height="330"></canvas>
@@ -279,6 +279,29 @@ DASHBOARD_HTML = """
       </div>
 
       <div class="stack">
+        <section>
+          <h2>Mantle Sepolia</h2>
+          <p>
+            Read-only testnet connection for hackathon demos.
+            Chain ID 5003, no signing or transaction submission.
+          </p>
+          <div class="grid">
+            <label>Wallet address
+              <input
+                id="mantleAddress"
+                value="0x0000000000000000000000000000000000000000"
+              />
+            </label>
+            <label>Network
+              <button id="checkMantle">Check RPC</button>
+            </label>
+            <label>Balance
+              <button id="checkMantleBalance" class="secondary">Check MNT</button>
+            </label>
+          </div>
+          <div class="metrics" id="mantleMetrics"></div>
+        </section>
+
         <section>
           <h2>Paper Trade Intent</h2>
           <p>
@@ -462,7 +485,7 @@ DASHBOARD_HTML = """
 
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "12px Arial";
-      ctx.fillText("Fixture OHLCV · strategy preview", pricePadLeft, 17);
+      ctx.fillText("Fixture OHLCV - strategy preview", pricePadLeft, 17);
 
       trades.forEach((trade) => {
         const index = candles.findIndex((candle) => candle.timestamp === trade.timestamp);
@@ -489,6 +512,13 @@ DASHBOARD_HTML = """
       return payload;
     }
 
+    async function getJson(path) {
+      const response = await fetch(path);
+      const payload = await response.json();
+      if (!response.ok) throw payload;
+      return payload;
+    }
+
     async function loadPair() {
       const metrics = document.getElementById("pairMetrics");
       metrics.innerHTML = "Loading...";
@@ -501,7 +531,7 @@ DASHBOARD_HTML = """
         document.getElementById("selectedPair").textContent =
           `${payload.base_token.symbol}/${payload.quote_token.symbol}`;
         document.getElementById("chartTitle").textContent =
-          `${payload.base_token.symbol}/${payload.quote_token.symbol} · 1H`;
+          `${payload.base_token.symbol}/${payload.quote_token.symbol} - 1H`;
         document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString();
         metrics.innerHTML = [
           metric("Pair", `${payload.base_token.symbol}/${payload.quote_token.symbol}`),
@@ -584,6 +614,44 @@ DASHBOARD_HTML = """
       showRaw(intent);
     }
 
+    async function checkMantle() {
+      const metrics = document.getElementById("mantleMetrics");
+      metrics.innerHTML = "Checking...";
+      try {
+        const payload = await getJson("/api/v1/chains/mantle-sepolia/status");
+        metrics.innerHTML = [
+          metric("Network", payload.name),
+          metric("Chain ID", payload.chain_id),
+          metric("Latest Block", payload.latest_block),
+          metric("Currency", payload.currency_symbol)
+        ].join("");
+        showRaw(payload);
+      } catch (error) {
+        metrics.innerHTML = `<span class="error">${JSON.stringify(error)}</span>`;
+        showRaw(error);
+      }
+    }
+
+    async function checkMantleBalance() {
+      const metrics = document.getElementById("mantleMetrics");
+      metrics.innerHTML = "Checking balance...";
+      try {
+        const payload = await postJson("/api/v1/chains/mantle-sepolia/balance", {
+          address: document.getElementById("mantleAddress").value
+        });
+        metrics.innerHTML = [
+          metric("Address", `${payload.address.slice(0, 6)}...${payload.address.slice(-4)}`),
+          metric("Balance", `${money(payload.balance_native)} ${payload.currency_symbol}`),
+          metric("Wei", payload.balance_wei),
+          metric("Chain ID", payload.chain_id)
+        ].join("");
+        showRaw(payload);
+      } catch (error) {
+        metrics.innerHTML = `<span class="error">${JSON.stringify(error)}</span>`;
+        showRaw(error);
+      }
+    }
+
     function initPairPresets() {
       const select = document.getElementById("pairPreset");
       select.innerHTML = pairPresets.map((preset, index) =>
@@ -600,10 +668,13 @@ DASHBOARD_HTML = """
     document.getElementById("loadPair").addEventListener("click", loadPair);
     document.getElementById("runBacktest").addEventListener("click", runBacktest);
     document.getElementById("startPaperTrade").addEventListener("click", startPaperTrade);
+    document.getElementById("checkMantle").addEventListener("click", checkMantle);
+    document.getElementById("checkMantleBalance").addEventListener("click", checkMantleBalance);
     initPairPresets();
     drawChart(fixtureCandles);
     loadPair();
     runBacktest();
+    checkMantle();
   </script>
 </body>
 </html>

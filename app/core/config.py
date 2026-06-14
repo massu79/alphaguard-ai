@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=list)
     trading_mode: str = "backtest"
     testnet_rpc_url: str | None = None
+    mantle_sepolia_rpc_url: str = "https://rpc.sepolia.mantle.xyz"
     market_data_provider: str = "fixture"
     market_data_base_url: str | None = None
     market_data_api_key: str | None = None
