@@ -1,8 +1,11 @@
 # AlphaGuard AI
 
-Human-approved AI agent for on-chain alpha detection and risk alerts.
+Human-approved AI trading cockpit for on-chain alpha detection and risk alerts.
 
-This repository starts with a FastAPI MVP: a lightweight API surface for risk assessment workflows.
+This repository contains a Mantle Sepolia-connected demo that combines live market
+reference data, paper trading, risk controls, backtesting, and auditable strategy
+decisions. It intentionally keeps real transaction execution disabled for the
+hackathon MVP.
 
 ## Features
 
@@ -11,6 +14,9 @@ This repository starts with a FastAPI MVP: a lightweight API surface for risk as
 - MVP analysis endpoint with deterministic risk scoring
 - Pydantic settings via environment variables
 - Pytest coverage for core API behavior
+- Mantle Sepolia RPC status and MNT balance checks
+- TradingView reference chart with local paper-position overlay
+- Paper trading with entry, TP/SL, unrealized PnL, and strategy audit log
 
 ## Project Structure
 
@@ -73,12 +79,45 @@ curl http://127.0.0.1:8000/health
 
 ## Current Demo Flow
 
-The current MVP exposes a deterministic demo risk assessment flow. It does not call blockchain APIs, submit transactions, or execute trades.
+The current MVP exposes a Mantle-connected paper trading flow. It reads Mantle
+Sepolia RPC data and market reference data, but it does not submit transactions
+or execute trades.
 
 1. Start the API with `uvicorn app.main:app --reload`.
 2. Confirm the service is running with `GET /health` or `GET /api/v1/health`.
-3. Submit weighted demo signals to `POST /api/v1/analysis/assess`.
-4. Run a no-execution strategy backtest with `POST /api/v1/backtests/run`.
+3. Open `http://127.0.0.1:8000/`.
+4. Confirm Mantle Sepolia latest block and optional MNT balance.
+5. Review the TradingView MNT/USDT reference chart.
+6. Create a local paper position with TP/SL.
+7. Watch unrealized PnL and the strategy audit log update.
+8. Run a no-execution strategy backtest with `POST /api/v1/backtests/run`.
+
+## Hackathon Positioning
+
+AlphaGuard AI is positioned as a Mantle Sepolia-connected AI trading cockpit for
+alpha discovery, paper execution, and auditable risk management.
+
+What is implemented:
+
+- Mantle Sepolia RPC connectivity: chain ID, latest block, and native MNT balance.
+- Live market reference through embedded TradingView and DexScreener pair data.
+- Paper trading with local position state, entry price, mark price, TP/SL, and PnL.
+- Transparent alpha signal panel based on momentum, volume, liquidity, risk, and
+  Mantle network freshness.
+- Strategy audit log for reproducible paper decisions.
+- Backtest endpoint and trade-log metrics.
+
+Safety boundaries:
+
+- No private keys are required.
+- No wallet connection is required.
+- No transactions are built, signed, or submitted.
+- Production trading remains disabled.
+
+Next production step:
+
+- Add allowlisted Mantle Sepolia contracts and a testnet-only executor behind
+  explicit human approval and circuit breakers.
 
 Example request:
 

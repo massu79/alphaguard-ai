@@ -10,7 +10,10 @@ def test_dashboard_renders_local_demo_page() -> None:
 
     assert response.status_code == 200
     assert "AlphaGuard AI Demo" in response.text
+    assert "Mantle AI Trading Cockpit" in response.text
     assert "Market Watch" in response.text
+    assert "Alpha Signal" in response.text
+    assert "Strategy Audit Log" in response.text
     assert "Mantle Sepolia" in response.text
     assert "Paper Trading" in response.text
     assert "paperRows" in response.text

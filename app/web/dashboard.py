@@ -100,6 +100,41 @@ DASHBOARD_HTML = """
       gap: 18px;
     }
     .stack { display: grid; gap: 18px; }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+    .hero-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px;
+      min-height: 96px;
+    }
+    .hero-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .hero-card strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 22px;
+    }
+    .signal-bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .signal-bar div {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #b42318, #f59e0b, #0f766e);
+      transition: width 180ms ease;
+    }
     .chart-wrap {
       height: 390px;
       margin-top: 14px;
@@ -242,6 +277,33 @@ DASHBOARD_HTML = """
     </p>
   </header>
   <main>
+    <section>
+      <h2>Mantle AI Trading Cockpit</h2>
+      <p>
+        Mantle Sepolia connectivity, live market reference, paper execution,
+        risk controls, and auditable strategy decisions.
+      </p>
+      <div class="hero-grid">
+        <div class="hero-card">
+          <span>Network</span>
+          <strong id="heroNetwork">Mantle Sepolia</strong>
+        </div>
+        <div class="hero-card">
+          <span>Latest Block</span>
+          <strong id="heroBlock">Checking...</strong>
+        </div>
+        <div class="hero-card">
+          <span>Alpha Signal</span>
+          <strong id="heroSignal">Pending</strong>
+          <div class="signal-bar"><div id="heroSignalBar"></div></div>
+        </div>
+        <div class="hero-card">
+          <span>Risk Mode</span>
+          <strong>Paper only</strong>
+        </div>
+      </div>
+    </section>
+
     <div class="layout">
       <div class="stack">
         <section>
@@ -290,6 +352,15 @@ DASHBOARD_HTML = """
           </div>
           <div class="position-strip" id="activePositionStrip"></div>
           <div class="metrics" id="pairMetrics"></div>
+        </section>
+
+        <section>
+          <h2>Alpha Signal</h2>
+          <p>
+            Transparent scoring from momentum, liquidity, volume, risk, and
+            Mantle network freshness.
+          </p>
+          <div class="metrics" id="alphaMetrics"></div>
         </section>
 
         <section>
@@ -403,6 +474,22 @@ DASHBOARD_HTML = """
           <h2>Raw Response</h2>
           <pre id="rawOutput">Ready.</pre>
         </section>
+
+        <section>
+          <h2>Strategy Audit Log</h2>
+          <p>Every paper decision is written here for reproducibility.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Event</th>
+                <th>Signal</th>
+                <th>Decision</th>
+              </tr>
+            </thead>
+            <tbody id="auditRows"></tbody>
+          </table>
+        </section>
       </div>
     </div>
   </main>
@@ -450,6 +537,8 @@ DASHBOARD_HTML = """
     let paperPositions = [];
     let activeCandles = fixtureCandles.map((candle) => ({ ...candle }));
     let liveTick = 0;
+    let mantleStatus = null;
+    let auditLog = [];
 
     function tradingViewUrl(symbol) {
       return "https://www.tradingview.com/widgetembed/?" + new URLSearchParams({
@@ -481,6 +570,86 @@ DASHBOARD_HTML = """
       if (activeCandles.length) return activeCandles[activeCandles.length - 1].close;
       if (latestPair && latestPair.price_usd) return Number(latestPair.price_usd);
       return fixtureCandles[fixtureCandles.length - 1].close;
+    }
+
+    function alphaSignal() {
+      const last = activeCandles[activeCandles.length - 1];
+      const previous = activeCandles[activeCandles.length - 5] || activeCandles[0];
+      const momentumPct = ((last.close - previous.close) / previous.close) * 100;
+      const volumeAvg = activeCandles.reduce((sum, candle) => sum + (candle.volume || 0), 0) /
+        activeCandles.length;
+      const volumeSpike = ((last.volume || 0) / Math.max(volumeAvg, 1)) * 100;
+      const liquidityScore = latestPair && latestPair.liquidity && latestPair.liquidity.usd
+        ? Math.min(latestPair.liquidity.usd / 1000000, 1) * 100
+        : 62;
+      const riskPenalty = paperPositions.length > 2 ? 18 : paperPositions.length * 6;
+      const freshness = mantleStatus ? 92 : 70;
+      const rawScore = momentumPct * 4
+        + volumeSpike * 0.2
+        + liquidityScore * 0.25
+        + freshness * 0.2
+        - riskPenalty;
+      const score = Math.max(
+        Math.min(rawScore, 100),
+        0
+      );
+      let decision = "WATCH";
+      if (score >= 70) decision = "LONG BIAS";
+      else if (score <= 35) decision = "RISK OFF";
+      return {
+        score,
+        decision,
+        momentumPct,
+        volumeSpike,
+        liquidityScore,
+        freshness,
+        riskPenalty
+      };
+    }
+
+    function renderAlphaSignal() {
+      const signal = alphaSignal();
+      document.getElementById("heroSignal").textContent =
+        `${signal.decision} ${money(signal.score)}`;
+      document.getElementById("heroSignalBar").style.width = `${signal.score}%`;
+      document.getElementById("alphaMetrics").innerHTML = [
+        metric("Decision", signal.decision),
+        metric("Score", money(signal.score)),
+        metric("Momentum", `${money(signal.momentumPct)}%`),
+        metric("Volume Spike", `${money(signal.volumeSpike)}%`),
+        metric("Liquidity", money(signal.liquidityScore)),
+        metric("Risk Penalty", `-${money(signal.riskPenalty)}`)
+      ].join("");
+      return signal;
+    }
+
+    function addAudit(event, decision, signal = alphaSignal()) {
+      auditLog = [{
+        time: new Date().toLocaleTimeString(),
+        event,
+        signal: `${signal.decision} ${money(signal.score)}`,
+        decision
+      }].concat(auditLog).slice(0, 8);
+      renderAuditLog();
+    }
+
+    function renderAuditLog() {
+      const rows = document.getElementById("auditRows");
+      rows.innerHTML = auditLog.map((item) => `
+        <tr>
+          <td>${item.time}</td>
+          <td>${item.event}</td>
+          <td>${item.signal}</td>
+          <td>${item.decision}</td>
+        </tr>
+      `).join("");
+      if (!auditLog.length) {
+        rows.innerHTML = `
+          <tr>
+            <td colspan="4">No strategy decisions yet.</td>
+          </tr>
+        `;
+      }
     }
 
     function drawChart(candles, trades = [], positions = paperPositions) {
@@ -667,6 +836,7 @@ DASHBOARD_HTML = """
           metric("24h Change", `${money(payload.price_change.h24)}%`)
         ].join("");
         renderPaperPositions();
+        renderAlphaSignal();
         drawChart(fixtureCandles);
         showRaw(payload);
       } catch (error) {
@@ -705,6 +875,7 @@ DASHBOARD_HTML = """
             <td>${money(trade.cash_after)}</td>
           </tr>
         `).join("");
+        addAudit("Backtest", `${payload.metrics.trades_count} trades generated`);
         drawChart(activeCandles, payload.trades);
         showRaw(payload);
       } catch (error) {
@@ -747,6 +918,12 @@ DASHBOARD_HTML = """
         execution: "disabled"
       };
       renderPaperPositions();
+      const signal = renderAlphaSignal();
+      addAudit(
+        "Paper trade",
+        `${side.replace("paper-", "").toUpperCase()} ${pair} @ ${money(entryPrice)}`,
+        signal
+      );
       drawChart(activeCandles);
       document.getElementById("tradeIntent").innerHTML = [
         metric("Mode", "Paper only"),
@@ -846,6 +1023,7 @@ DASHBOARD_HTML = """
       activeCandles = activeCandles.slice(0, -1).concat(forming);
       liveTick += 1;
       renderPaperPositions();
+      renderAlphaSignal();
       drawChart(activeCandles);
     }
 
@@ -854,12 +1032,17 @@ DASHBOARD_HTML = """
       metrics.innerHTML = "Checking...";
       try {
         const payload = await getJson("/api/v1/chains/mantle-sepolia/status");
+        mantleStatus = payload;
+        document.getElementById("heroNetwork").textContent = payload.name;
+        document.getElementById("heroBlock").textContent = payload.latest_block;
         metrics.innerHTML = [
           metric("Network", payload.name),
           metric("Chain ID", payload.chain_id),
           metric("Latest Block", payload.latest_block),
           metric("Currency", payload.currency_symbol)
         ].join("");
+        renderAlphaSignal();
+        addAudit("Mantle RPC", `Block ${payload.latest_block} verified`);
         showRaw(payload);
       } catch (error) {
         metrics.innerHTML = `<span class="error">${JSON.stringify(error)}</span>`;
@@ -928,6 +1111,8 @@ DASHBOARD_HTML = """
     document.getElementById("selectedPair").textContent = pairPresets[0].asset;
     drawChart(activeCandles);
     renderPaperPositions();
+    renderAlphaSignal();
+    renderAuditLog();
     runBacktest();
     checkMantle();
     setInterval(tickChart, 2500);
