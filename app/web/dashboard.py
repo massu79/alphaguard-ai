@@ -460,8 +460,11 @@ DASHBOARD_HTML = """
       const highs = candles.map((candle) => candle.high).concat(positionPrices);
       const lows = candles.map((candle) => candle.low).concat(positionPrices);
       const volumes = candles.map((candle) => candle.volume || 0);
-      const min = Math.min(...lows);
-      const max = Math.max(...highs);
+      const rawMin = Math.min(...lows);
+      const rawMax = Math.max(...highs);
+      const rawRange = Math.max(rawMax - rawMin, rawMax * 0.018, 0.01);
+      const min = rawMin - rawRange * 0.55;
+      const max = rawMax + rawRange * 0.55;
       const maxVolume = Math.max(...volumes, 1);
       const range = Math.max(max - min, 1);
       const candleSlot = plotWidth / candles.length;
@@ -560,7 +563,7 @@ DASHBOARD_HTML = """
 
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "12px Arial";
-      ctx.fillText("Fixture OHLCV - strategy preview", pricePadLeft, 17);
+      ctx.fillText("MNT/USDT 1H - live forming candle", pricePadLeft, 17);
 
       trades.forEach((trade) => {
         const index = candles.findIndex((candle) => candle.timestamp === trade.timestamp);
@@ -770,11 +773,11 @@ DASHBOARD_HTML = """
 
     function buildMntDemoCandles() {
       return [
-        0.641, 0.646, 0.638, 0.652, 0.664, 0.658, 0.671, 0.682,
-        0.676, 0.689, 0.697, 0.692, 0.704, 0.715, 0.708, 0.721
+        0.628, 0.642, 0.633, 0.651, 0.668, 0.659, 0.681, 0.703,
+        0.687, 0.711, 0.736, 0.718, 0.752, 0.779, 0.744, 0.768
       ].map((close, index, values) => {
         const open = index === 0 ? close * 0.995 : values[index - 1];
-        const drift = Math.sin(index + 1) * 0.004;
+        const drift = Math.sin(index + 1) * 0.012;
         return {
           timestamp: index + 1,
           open,
@@ -788,17 +791,16 @@ DASHBOARD_HTML = """
 
     function tickChart() {
       const last = activeCandles[activeCandles.length - 1];
-      const direction = Math.sin(liveTick / 2) * 0.003 + (Math.random() - 0.5) * 0.002;
+      const direction = Math.sin(liveTick / 2) * 0.006 + (Math.random() - 0.5) * 0.004;
       const close = Math.max(last.close * (1 + direction), 0.0001);
-      const next = {
-        timestamp: last.timestamp + 1,
-        open: last.close,
-        high: Math.max(last.close, close) * 1.003,
-        low: Math.min(last.close, close) * 0.997,
+      const forming = {
+        ...last,
+        high: Math.max(last.high, close),
+        low: Math.min(last.low, close),
         close,
-        volume: Math.max((last.volume || 1000) * (0.92 + Math.random() * 0.18), 1)
+        volume: Math.max((last.volume || 1000) + 35 + Math.random() * 70, 1)
       };
-      activeCandles = activeCandles.slice(-31).concat(next);
+      activeCandles = activeCandles.slice(0, -1).concat(forming);
       liveTick += 1;
       renderPaperPositions();
       drawChart(activeCandles);

@@ -15,6 +15,7 @@ def test_dashboard_renders_local_demo_page() -> None:
     assert "Paper Trading" in response.text
     assert "paperRows" in response.text
     assert "MNT/USDT" in response.text
+    assert "live forming candle" in response.text
     assert "Take profit %" in response.text
     assert "Stop loss %" in response.text
     assert "activePositionStrip" in response.text
