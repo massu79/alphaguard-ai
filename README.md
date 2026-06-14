@@ -54,6 +54,15 @@ Run the API locally:
 uvicorn app.main:app --reload
 ```
 
+Or use the development script:
+
+```powershell
+.\scripts\dev.ps1
+```
+
+Keep that terminal open while using the app.
+
+Open the dashboard at `http://127.0.0.1:8000/`.
 Open the docs at `http://127.0.0.1:8000/docs`.
 
 For a quick smoke check:
