@@ -110,6 +110,20 @@ DASHBOARD_HTML = """
       position: relative;
       overflow: hidden;
     }
+    .real-chart-wrap {
+      height: 430px;
+      margin-top: 14px;
+      border: 1px solid #263241;
+      border-radius: 8px;
+      background: #0b1118;
+      overflow: hidden;
+    }
+    .real-chart-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
     .chart-toolbar {
       display: flex;
       align-items: center;
@@ -215,6 +229,7 @@ DASHBOARD_HTML = """
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
       .chart-wrap { height: 320px; }
+      .real-chart-wrap { height: 360px; }
     }
   </style>
 </head>
@@ -236,6 +251,13 @@ DASHBOARD_HTML = """
             <label>Preset pair
               <select id="pairPreset"></select>
             </label>
+            <label>Real chart
+              <select id="realChartPreset">
+                <option value="BYBIT:MNTUSDT">TradingView MNTUSDT</option>
+                <option value="BINANCE:ETHUSDT">TradingView ETHUSDT</option>
+                <option value="COINBASE:ETHUSD">TradingView ETHUSD</option>
+              </select>
+            </label>
             <label>Chain slug
               <input id="chainSlug" value="ethereum" />
             </label>
@@ -251,10 +273,18 @@ DASHBOARD_HTML = """
             <span class="pill">Mode: paper/backtest only</span>
             <span class="pill" id="lastUpdated">Not loaded</span>
           </div>
+          <div class="real-chart-wrap">
+            <iframe
+              id="realChartFrame"
+              title="TradingView real market chart"
+              loading="lazy"
+              src="https://www.tradingview.com/widgetembed/?symbol=BYBIT%3AMNTUSDT&interval=60&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&saveimage=0"
+            ></iframe>
+          </div>
           <div class="chart-wrap">
             <div class="chart-toolbar">
-              <strong id="chartTitle">WETH/USDC - 1H</strong>
-              <span class="chart-badge">Candles + volume</span>
+              <strong id="chartTitle">MNT/USDT - Local Position Map</strong>
+              <span class="chart-badge">Paper TP/SL overlay</span>
             </div>
             <canvas id="priceChart" width="900" height="330"></canvas>
           </div>
@@ -420,6 +450,19 @@ DASHBOARD_HTML = """
     let paperPositions = [];
     let activeCandles = fixtureCandles.map((candle) => ({ ...candle }));
     let liveTick = 0;
+
+    function tradingViewUrl(symbol) {
+      return "https://www.tradingview.com/widgetembed/?" + new URLSearchParams({
+        symbol,
+        interval: "60",
+        theme: "dark",
+        style: "1",
+        timezone: "Etc/UTC",
+        withdateranges: "1",
+        hideideas: "1",
+        saveimage: "0"
+      }).toString();
+    }
 
     function money(value) {
       if (value === null || value === undefined) return "-";
@@ -861,7 +904,8 @@ DASHBOARD_HTML = """
             quote_token: { symbol: "USDT" },
             price_usd: activeCandles[activeCandles.length - 1].close
           };
-          document.getElementById("chartTitle").textContent = `${preset.asset} - 1H`;
+          document.getElementById("chartTitle").textContent =
+            `${preset.asset} - Local Position Map`;
           renderPaperPositions();
           drawChart(activeCandles);
         }
@@ -873,6 +917,9 @@ DASHBOARD_HTML = """
     document.getElementById("startPaperTrade").addEventListener("click", startPaperTrade);
     document.getElementById("checkMantle").addEventListener("click", checkMantle);
     document.getElementById("checkMantleBalance").addEventListener("click", checkMantleBalance);
+    document.getElementById("realChartPreset").addEventListener("change", (event) => {
+      document.getElementById("realChartFrame").src = tradingViewUrl(event.target.value);
+    });
     initPairPresets();
     activeCandles = buildMntDemoCandles();
     document.getElementById("pairPreset").value = "0";
