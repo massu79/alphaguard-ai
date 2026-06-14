@@ -151,6 +151,30 @@ DASHBOARD_HTML = """
       padding: 5px 9px;
       background: #ffffff;
     }
+    .position-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .position-tile {
+      border: 1px solid #263241;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 10px;
+      min-height: 66px;
+    }
+    .position-tile span {
+      display: block;
+      color: #94a3b8;
+      font-size: 11px;
+    }
+    .position-tile strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 17px;
+    }
     .metrics {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -234,6 +258,7 @@ DASHBOARD_HTML = """
             </div>
             <canvas id="priceChart" width="900" height="330"></canvas>
           </div>
+          <div class="position-strip" id="activePositionStrip"></div>
           <div class="metrics" id="pairMetrics"></div>
         </section>
 
@@ -319,6 +344,12 @@ DASHBOARD_HTML = """
             <label>Notional USD
               <input id="notionalUsd" type="number" value="100" min="1" />
             </label>
+            <label>Take profit %
+              <input id="takeProfitPct" type="number" value="6" min="0.1" step="0.1" />
+            </label>
+            <label>Stop loss %
+              <input id="stopLossPct" type="number" value="3" min="0.1" step="0.1" />
+            </label>
             <label>Action
               <button id="startPaperTrade" class="danger">Start Paper Trade</button>
             </label>
@@ -348,6 +379,13 @@ DASHBOARD_HTML = """
 
   <script>
     const pairPresets = [
+      {
+        label: "Mantle MNT/USDT Demo",
+        chainSlug: "mantle",
+        pairAddress: "demo-mnt-usdt",
+        asset: "MNT/USDT",
+        demo: true
+      },
       {
         label: "Ethereum WETH/USDC",
         chainSlug: "ethereum",
@@ -380,6 +418,8 @@ DASHBOARD_HTML = """
     ];
     let latestPair = null;
     let paperPositions = [];
+    let activeCandles = fixtureCandles.map((candle) => ({ ...candle }));
+    let liveTick = 0;
 
     function money(value) {
       if (value === null || value === undefined) return "-";
@@ -395,11 +435,12 @@ DASHBOARD_HTML = """
     }
 
     function latestPrice() {
+      if (activeCandles.length) return activeCandles[activeCandles.length - 1].close;
       if (latestPair && latestPair.price_usd) return Number(latestPair.price_usd);
       return fixtureCandles[fixtureCandles.length - 1].close;
     }
 
-    function drawChart(candles, trades = []) {
+    function drawChart(candles, trades = [], positions = paperPositions) {
       const canvas = document.getElementById("priceChart");
       const ctx = canvas.getContext("2d");
       const width = canvas.width;
@@ -411,8 +452,13 @@ DASHBOARD_HTML = """
       const volumeHeight = 54;
       const plotWidth = width - pricePadLeft - pricePadRight;
       const plotHeight = height - pricePadTop - pricePadBottom;
-      const highs = candles.map((candle) => candle.high);
-      const lows = candles.map((candle) => candle.low);
+      const positionPrices = positions.flatMap((position) => [
+        position.entry_price,
+        position.take_profit,
+        position.stop_loss
+      ]);
+      const highs = candles.map((candle) => candle.high).concat(positionPrices);
+      const lows = candles.map((candle) => candle.low).concat(positionPrices);
       const volumes = candles.map((candle) => candle.volume || 0);
       const min = Math.min(...lows);
       const max = Math.max(...highs);
@@ -445,6 +491,23 @@ DASHBOARD_HTML = """
         return { x, y };
       };
       const yForPrice = (price) => pricePadTop + ((max - price) / range) * plotHeight;
+
+      const drawPriceLine = (price, label, color) => {
+        const y = yForPrice(price);
+        if (y < pricePadTop - 8 || y > pricePadTop + plotHeight + 8) return;
+        ctx.strokeStyle = color;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(pricePadLeft, y);
+        ctx.lineTo(width - pricePadRight + 12, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        ctx.fillRect(width - pricePadRight + 15, y - 10, 58, 20);
+        ctx.fillStyle = "#0b1118";
+        ctx.font = "11px Arial";
+        ctx.fillText(label, width - pricePadRight + 20, y + 4);
+      };
 
       candles.forEach((candle, index) => {
         const point = pointFor(candle, index);
@@ -488,18 +551,12 @@ DASHBOARD_HTML = """
 
       const last = candles[candles.length - 1];
       const lastY = yForPrice(last.close);
-      ctx.strokeStyle = "#f59e0b";
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(pricePadLeft, lastY);
-      ctx.lineTo(width - pricePadRight + 12, lastY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "#f59e0b";
-      ctx.fillRect(width - pricePadRight + 15, lastY - 10, 54, 20);
-      ctx.fillStyle = "#0b1118";
-      ctx.font = "12px Arial";
-      ctx.fillText(money(last.close), width - pricePadRight + 20, lastY + 4);
+      positions.forEach((position) => {
+        drawPriceLine(position.take_profit, "TP", "#22ab94");
+        drawPriceLine(position.entry_price, "ENTRY", "#3b82f6");
+        drawPriceLine(position.stop_loss, "SL", "#f23645");
+      });
+      drawPriceLine(last.close, money(last.close), "#f59e0b");
 
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "12px Arial";
@@ -585,7 +642,7 @@ DASHBOARD_HTML = """
           initial_cash: Number(document.getElementById("initialCash").value),
           short_window: Number(document.getElementById("shortWindow").value),
           long_window: Number(document.getElementById("longWindow").value),
-          candles: fixtureCandles
+          candles: activeCandles
         });
         metrics.innerHTML = [
           metric("Ending Equity", `$${money(payload.metrics.ending_equity)}`),
@@ -602,7 +659,7 @@ DASHBOARD_HTML = """
             <td>${money(trade.cash_after)}</td>
           </tr>
         `).join("");
-        drawChart(fixtureCandles, payload.trades);
+        drawChart(activeCandles, payload.trades);
         showRaw(payload);
       } catch (error) {
         metrics.innerHTML = `<span class="error">${JSON.stringify(error)}</span>`;
@@ -617,12 +674,17 @@ DASHBOARD_HTML = """
         ? `${latestPair.base_token.symbol}/${latestPair.quote_token.symbol}`
         : document.getElementById("selectedPair").textContent;
       const entryPrice = latestPrice();
+      const takeProfitPct = Number(document.getElementById("takeProfitPct").value) / 100;
+      const stopLossPct = Number(document.getElementById("stopLossPct").value) / 100;
       if (side !== "watch") {
+        const isLong = side === "paper-buy";
         paperPositions.push({
           side,
           pair,
           notional_usd: notional,
           entry_price: entryPrice,
+          take_profit: isLong ? entryPrice * (1 + takeProfitPct) : entryPrice * (1 - takeProfitPct),
+          stop_loss: isLong ? entryPrice * (1 - stopLossPct) : entryPrice * (1 + stopLossPct),
           quantity: entryPrice ? notional / entryPrice : 0,
           opened_at: new Date().toISOString()
         });
@@ -633,10 +695,13 @@ DASHBOARD_HTML = """
         pair,
         notional_usd: notional,
         entry_price: entryPrice,
+        take_profit_pct: takeProfitPct * 100,
+        stop_loss_pct: stopLossPct * 100,
         status: side === "watch" ? "watching" : "intent_created",
         execution: "disabled"
       };
       renderPaperPositions();
+      drawChart(activeCandles);
       document.getElementById("tradeIntent").innerHTML = [
         metric("Mode", "Paper only"),
         metric("Intent", intent.status),
@@ -655,7 +720,22 @@ DASHBOARD_HTML = """
 
     function renderPaperPositions() {
       const rows = document.getElementById("paperRows");
+      const strip = document.getElementById("activePositionStrip");
       const markPrice = latestPrice();
+      const totalPnl = paperPositions.reduce(
+        (sum, position) => sum + paperPnl(position, markPrice),
+        0
+      );
+      const active = paperPositions[paperPositions.length - 1];
+      strip.innerHTML = [
+        positionTile("Position", active ? active.pair : "No active position"),
+        positionTile("Mark", `$${money(markPrice)}`),
+        positionTile("Unrealized PnL", `$${money(totalPnl)}`, totalPnl >= 0),
+        positionTile(
+          "TP / SL",
+          active ? `${money(active.take_profit)} / ${money(active.stop_loss)}` : "-"
+        )
+      ].join("");
       rows.innerHTML = paperPositions.map((position) => {
         const pnl = paperPnl(position, markPrice);
         const color = pnl >= 0 ? "#0f766e" : "#b42318";
@@ -676,6 +756,52 @@ DASHBOARD_HTML = """
           </tr>
         `;
       }
+    }
+
+    function positionTile(label, value, positive = null) {
+      const color = positive === null ? "#e5e7eb" : positive ? "#22ab94" : "#f23645";
+      return `
+        <div class="position-tile">
+          <span>${label}</span>
+          <strong style="color:${color};">${value}</strong>
+        </div>
+      `;
+    }
+
+    function buildMntDemoCandles() {
+      return [
+        0.641, 0.646, 0.638, 0.652, 0.664, 0.658, 0.671, 0.682,
+        0.676, 0.689, 0.697, 0.692, 0.704, 0.715, 0.708, 0.721
+      ].map((close, index, values) => {
+        const open = index === 0 ? close * 0.995 : values[index - 1];
+        const drift = Math.sin(index + 1) * 0.004;
+        return {
+          timestamp: index + 1,
+          open,
+          high: Math.max(open, close) + Math.abs(drift) + 0.004,
+          low: Math.min(open, close) - Math.abs(drift) - 0.003,
+          close,
+          volume: 1200 + index * 115
+        };
+      });
+    }
+
+    function tickChart() {
+      const last = activeCandles[activeCandles.length - 1];
+      const direction = Math.sin(liveTick / 2) * 0.003 + (Math.random() - 0.5) * 0.002;
+      const close = Math.max(last.close * (1 + direction), 0.0001);
+      const next = {
+        timestamp: last.timestamp + 1,
+        open: last.close,
+        high: Math.max(last.close, close) * 1.003,
+        low: Math.min(last.close, close) * 0.997,
+        close,
+        volume: Math.max((last.volume || 1000) * (0.92 + Math.random() * 0.18), 1)
+      };
+      activeCandles = activeCandles.slice(-31).concat(next);
+      liveTick += 1;
+      renderPaperPositions();
+      drawChart(activeCandles);
     }
 
     async function checkMantle() {
@@ -726,6 +852,17 @@ DASHBOARD_HTML = """
         document.getElementById("chainSlug").value = preset.chainSlug;
         document.getElementById("pairAddress").value = preset.pairAddress;
         document.getElementById("selectedPair").textContent = preset.asset;
+        if (preset.demo) {
+          activeCandles = buildMntDemoCandles();
+          latestPair = {
+            base_token: { symbol: "MNT" },
+            quote_token: { symbol: "USDT" },
+            price_usd: activeCandles[activeCandles.length - 1].close
+          };
+          document.getElementById("chartTitle").textContent = `${preset.asset} - 1H`;
+          renderPaperPositions();
+          drawChart(activeCandles);
+        }
       });
     }
 
@@ -735,11 +872,16 @@ DASHBOARD_HTML = """
     document.getElementById("checkMantle").addEventListener("click", checkMantle);
     document.getElementById("checkMantleBalance").addEventListener("click", checkMantleBalance);
     initPairPresets();
-    drawChart(fixtureCandles);
+    activeCandles = buildMntDemoCandles();
+    document.getElementById("pairPreset").value = "0";
+    document.getElementById("chainSlug").value = pairPresets[0].chainSlug;
+    document.getElementById("pairAddress").value = pairPresets[0].pairAddress;
+    document.getElementById("selectedPair").textContent = pairPresets[0].asset;
+    drawChart(activeCandles);
     renderPaperPositions();
-    loadPair();
     runBacktest();
     checkMantle();
+    setInterval(tickChart, 2500);
   </script>
 </body>
 </html>

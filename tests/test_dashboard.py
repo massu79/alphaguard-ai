@@ -14,6 +14,10 @@ def test_dashboard_renders_local_demo_page() -> None:
     assert "Mantle Sepolia" in response.text
     assert "Paper Trading" in response.text
     assert "paperRows" in response.text
+    assert "MNT/USDT" in response.text
+    assert "Take profit %" in response.text
+    assert "Stop loss %" in response.text
+    assert "activePositionStrip" in response.text
     assert "priceChart" in response.text
     assert "Candles + volume" in response.text
     assert "/api/v1/market-data/pair" in response.text
