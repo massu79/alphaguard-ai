@@ -303,10 +303,10 @@ DASHBOARD_HTML = """
         </section>
 
         <section>
-          <h2>Paper Trade Intent</h2>
+          <h2>Paper Trading</h2>
           <p>
-            Starts a local intent only. No wallet connection, signing,
-            or transaction submission.
+            Creates local paper positions only. No wallet connection,
+            signing, or transaction submission.
           </p>
           <div class="grid">
             <label>Side
@@ -324,6 +324,18 @@ DASHBOARD_HTML = """
             </label>
           </div>
           <div class="metrics" id="tradeIntent"></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Side</th>
+                <th>Pair</th>
+                <th>Entry</th>
+                <th>Mark</th>
+                <th>PnL</th>
+              </tr>
+            </thead>
+            <tbody id="paperRows"></tbody>
+          </table>
         </section>
 
         <section>
@@ -367,6 +379,7 @@ DASHBOARD_HTML = """
       { timestamp: 8, open: 11.0, high: 11.4, low: 8.7, close: 9.0, volume: 2600 }
     ];
     let latestPair = null;
+    let paperPositions = [];
 
     function money(value) {
       if (value === null || value === undefined) return "-";
@@ -379,6 +392,11 @@ DASHBOARD_HTML = """
 
     function showRaw(value) {
       document.getElementById("rawOutput").textContent = JSON.stringify(value, null, 2);
+    }
+
+    function latestPrice() {
+      if (latestPair && latestPair.price_usd) return Number(latestPair.price_usd);
+      return fixtureCandles[fixtureCandles.length - 1].close;
     }
 
     function drawChart(candles, trades = []) {
@@ -545,6 +563,7 @@ DASHBOARD_HTML = """
           ),
           metric("24h Change", `${money(payload.price_change.h24)}%`)
         ].join("");
+        renderPaperPositions();
         drawChart(fixtureCandles);
         showRaw(payload);
       } catch (error) {
@@ -597,21 +616,66 @@ DASHBOARD_HTML = """
       const pair = latestPair
         ? `${latestPair.base_token.symbol}/${latestPair.quote_token.symbol}`
         : document.getElementById("selectedPair").textContent;
+      const entryPrice = latestPrice();
+      if (side !== "watch") {
+        paperPositions.push({
+          side,
+          pair,
+          notional_usd: notional,
+          entry_price: entryPrice,
+          quantity: entryPrice ? notional / entryPrice : 0,
+          opened_at: new Date().toISOString()
+        });
+      }
       const intent = {
         mode: "paper",
         side,
         pair,
         notional_usd: notional,
+        entry_price: entryPrice,
         status: side === "watch" ? "watching" : "intent_created",
         execution: "disabled"
       };
+      renderPaperPositions();
       document.getElementById("tradeIntent").innerHTML = [
         metric("Mode", "Paper only"),
         metric("Intent", intent.status),
         metric("Pair", pair),
-        metric("Notional", `$${money(notional)}`)
+        metric("Notional", `$${money(notional)}`),
+        metric("Entry", `$${money(entryPrice)}`)
       ].join("");
       showRaw(intent);
+    }
+
+    function paperPnl(position, markPrice) {
+      if (!markPrice) return 0;
+      const direction = position.side === "paper-buy" ? 1 : -1;
+      return (markPrice - position.entry_price) * position.quantity * direction;
+    }
+
+    function renderPaperPositions() {
+      const rows = document.getElementById("paperRows");
+      const markPrice = latestPrice();
+      rows.innerHTML = paperPositions.map((position) => {
+        const pnl = paperPnl(position, markPrice);
+        const color = pnl >= 0 ? "#0f766e" : "#b42318";
+        return `
+          <tr>
+            <td>${position.side.replace("paper-", "").toUpperCase()}</td>
+            <td>${position.pair}</td>
+            <td>${money(position.entry_price)}</td>
+            <td>${money(markPrice)}</td>
+            <td style="color:${color};font-weight:700;">${money(pnl)}</td>
+          </tr>
+        `;
+      }).join("");
+      if (!paperPositions.length) {
+        rows.innerHTML = `
+          <tr>
+            <td colspan="5">No paper positions yet.</td>
+          </tr>
+        `;
+      }
     }
 
     async function checkMantle() {
@@ -672,6 +736,7 @@ DASHBOARD_HTML = """
     document.getElementById("checkMantleBalance").addEventListener("click", checkMantleBalance);
     initPairPresets();
     drawChart(fixtureCandles);
+    renderPaperPositions();
     loadPair();
     runBacktest();
     checkMantle();
