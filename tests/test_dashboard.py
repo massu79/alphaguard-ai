@@ -13,5 +13,6 @@ def test_dashboard_renders_local_demo_page() -> None:
     assert "Market Watch" in response.text
     assert "Paper Trade Intent" in response.text
     assert "priceChart" in response.text
+    assert "Candles + volume" in response.text
     assert "/api/v1/market-data/pair" in response.text
     assert "/api/v1/backtests/run" in response.text

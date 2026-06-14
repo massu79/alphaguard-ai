@@ -101,16 +101,39 @@ DASHBOARD_HTML = """
     }
     .stack { display: grid; gap: 18px; }
     .chart-wrap {
-      height: 330px;
+      height: 390px;
       margin-top: 14px;
-      border: 1px solid var(--line);
+      border: 1px solid #263241;
       border-radius: 8px;
-      background: #fbfcfe;
-      padding: 10px;
+      background: #0b1118;
+      padding: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .chart-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 38px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #263241;
+      color: #cbd5e1;
+      font-size: 12px;
+    }
+    .chart-toolbar strong {
+      color: #f8fafc;
+      font-size: 13px;
+    }
+    .chart-badge {
+      border: 1px solid #334155;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #111827;
     }
     canvas {
       width: 100%;
-      height: 100%;
+      height: calc(100% - 38px);
       display: block;
     }
     .status-line {
@@ -167,7 +190,7 @@ DASHBOARD_HTML = """
     .error { color: var(--accent-2); font-weight: 700; }
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
-      .chart-wrap { height: 260px; }
+      .chart-wrap { height: 320px; }
     }
   </style>
 </head>
@@ -205,6 +228,10 @@ DASHBOARD_HTML = """
             <span class="pill" id="lastUpdated">Not loaded</span>
           </div>
           <div class="chart-wrap">
+            <div class="chart-toolbar">
+              <strong id="chartTitle">WETH/USDC · 1H</strong>
+              <span class="chart-badge">Candles + volume</span>
+            </div>
             <canvas id="priceChart" width="900" height="330"></canvas>
           </div>
           <div class="metrics" id="pairMetrics"></div>
@@ -307,14 +334,14 @@ DASHBOARD_HTML = """
     ];
 
     const fixtureCandles = [
-      { timestamp: 1, open: 10, high: 10, low: 10, close: 10 },
-      { timestamp: 2, open: 9, high: 9, low: 9, close: 9 },
-      { timestamp: 3, open: 8, high: 8, low: 8, close: 8 },
-      { timestamp: 4, open: 12, high: 12, low: 12, close: 12 },
-      { timestamp: 5, open: 14, high: 14, low: 14, close: 14 },
-      { timestamp: 6, open: 13, high: 13, low: 13, close: 13 },
-      { timestamp: 7, open: 11, high: 11, low: 11, close: 11 },
-      { timestamp: 8, open: 9, high: 9, low: 9, close: 9 }
+      { timestamp: 1, open: 10.2, high: 10.8, low: 9.7, close: 10.0, volume: 1100 },
+      { timestamp: 2, open: 10.0, high: 10.2, low: 8.8, close: 9.0, volume: 1600 },
+      { timestamp: 3, open: 9.0, high: 9.4, low: 7.8, close: 8.0, volume: 2100 },
+      { timestamp: 4, open: 8.0, high: 12.4, low: 7.9, close: 12.0, volume: 3200 },
+      { timestamp: 5, open: 12.0, high: 14.6, low: 11.7, close: 14.0, volume: 2800 },
+      { timestamp: 6, open: 14.0, high: 14.3, low: 12.6, close: 13.0, volume: 1800 },
+      { timestamp: 7, open: 13.0, high: 13.2, low: 10.5, close: 11.0, volume: 2300 },
+      { timestamp: 8, open: 11.0, high: 11.4, low: 8.7, close: 9.0, volume: 2600 }
     ];
     let latestPair = null;
 
@@ -336,55 +363,118 @@ DASHBOARD_HTML = """
       const ctx = canvas.getContext("2d");
       const width = canvas.width;
       const height = canvas.height;
-      const padding = 34;
-      const closes = candles.map((candle) => candle.close);
-      const min = Math.min(...closes);
-      const max = Math.max(...closes);
+      const pricePadLeft = 42;
+      const pricePadRight = 76;
+      const pricePadTop = 22;
+      const pricePadBottom = 86;
+      const volumeHeight = 54;
+      const plotWidth = width - pricePadLeft - pricePadRight;
+      const plotHeight = height - pricePadTop - pricePadBottom;
+      const highs = candles.map((candle) => candle.high);
+      const lows = candles.map((candle) => candle.low);
+      const volumes = candles.map((candle) => candle.volume || 0);
+      const min = Math.min(...lows);
+      const max = Math.max(...highs);
+      const maxVolume = Math.max(...volumes, 1);
       const range = Math.max(max - min, 1);
+      const candleSlot = plotWidth / candles.length;
+      const bodyWidth = Math.max(Math.min(candleSlot * 0.58, 18), 6);
 
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = "#fbfcfe";
+      ctx.fillStyle = "#0b1118";
       ctx.fillRect(0, 0, width, height);
-      ctx.strokeStyle = "#d9dee7";
+      ctx.strokeStyle = "#1f2937";
       ctx.lineWidth = 1;
 
       for (let index = 0; index < 5; index += 1) {
-        const y = padding + ((height - padding * 2) / 4) * index;
+        const y = pricePadTop + (plotHeight / 4) * index;
         ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(width - padding, y);
+        ctx.moveTo(pricePadLeft, y);
+        ctx.lineTo(width - pricePadRight + 12, y);
         ctx.stroke();
+        const price = max - (range / 4) * index;
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "11px Arial";
+        ctx.fillText(money(price), width - pricePadRight + 20, y + 4);
       }
 
       const pointFor = (candle, index) => {
-        const x = padding + ((width - padding * 2) / (candles.length - 1)) * index;
-        const y = height - padding - ((candle.close - min) / range) * (height - padding * 2);
+        const x = pricePadLeft + candleSlot * index + candleSlot / 2;
+        const y = pricePadTop + ((max - candle.close) / range) * plotHeight;
         return { x, y };
       };
+      const yForPrice = (price) => pricePadTop + ((max - price) / range) * plotHeight;
 
-      ctx.strokeStyle = "#0f766e";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
       candles.forEach((candle, index) => {
         const point = pointFor(candle, index);
-        if (index === 0) ctx.moveTo(point.x, point.y);
-        else ctx.lineTo(point.x, point.y);
-      });
-      ctx.stroke();
+        const openY = yForPrice(candle.open);
+        const closeY = yForPrice(candle.close);
+        const highY = yForPrice(candle.high);
+        const lowY = yForPrice(candle.low);
+        const isUp = candle.close >= candle.open;
+        const color = isUp ? "#22ab94" : "#f23645";
+        const volumeTop = height - 24 - ((candle.volume || 0) / maxVolume) * volumeHeight;
 
-      ctx.fillStyle = "#17202a";
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(
+          point.x - bodyWidth / 2,
+          volumeTop,
+          bodyWidth,
+          height - 24 - volumeTop
+        );
+        ctx.globalAlpha = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(point.x, highY);
+        ctx.lineTo(point.x, lowY);
+        ctx.stroke();
+
+        ctx.fillRect(
+          point.x - bodyWidth / 2,
+          Math.min(openY, closeY),
+          bodyWidth,
+          Math.max(Math.abs(closeY - openY), 2)
+        );
+
+        if (index % 2 === 0 || index === candles.length - 1) {
+          ctx.fillStyle = "#64748b";
+          ctx.font = "11px Arial";
+          ctx.fillText(String(candle.timestamp), point.x - 4, height - 8);
+        }
+      });
+
+      const last = candles[candles.length - 1];
+      const lastY = yForPrice(last.close);
+      ctx.strokeStyle = "#f59e0b";
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pricePadLeft, lastY);
+      ctx.lineTo(width - pricePadRight + 12, lastY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#f59e0b";
+      ctx.fillRect(width - pricePadRight + 15, lastY - 10, 54, 20);
+      ctx.fillStyle = "#0b1118";
       ctx.font = "12px Arial";
-      ctx.fillText(`High ${money(max)}`, padding, 18);
-      ctx.fillText(`Low ${money(min)}`, padding, height - 12);
+      ctx.fillText(money(last.close), width - pricePadRight + 20, lastY + 4);
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "12px Arial";
+      ctx.fillText("Fixture OHLCV · strategy preview", pricePadLeft, 17);
 
       trades.forEach((trade) => {
         const index = candles.findIndex((candle) => candle.timestamp === trade.timestamp);
         if (index < 0) return;
         const point = pointFor(candles[index], index);
-        ctx.fillStyle = trade.action === "buy" ? "#2563eb" : "#b42318";
+        ctx.fillStyle = trade.action === "buy" ? "#3b82f6" : "#ef4444";
         ctx.beginPath();
-        ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+        ctx.arc(point.x, point.y - 16, 6, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = "#e5e7eb";
+        ctx.font = "10px Arial";
+        ctx.fillText(trade.action.toUpperCase(), point.x - 10, point.y - 24);
       });
     }
 
@@ -410,6 +500,8 @@ DASHBOARD_HTML = """
         latestPair = payload;
         document.getElementById("selectedPair").textContent =
           `${payload.base_token.symbol}/${payload.quote_token.symbol}`;
+        document.getElementById("chartTitle").textContent =
+          `${payload.base_token.symbol}/${payload.quote_token.symbol} · 1H`;
         document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString();
         metrics.innerHTML = [
           metric("Pair", `${payload.base_token.symbol}/${payload.quote_token.symbol}`),
