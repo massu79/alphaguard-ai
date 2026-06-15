@@ -104,6 +104,7 @@ DASHBOARD_HTML = """
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 10px;
+      margin-top: 14px;
     }
     .hero-card {
       border: 1px solid var(--line);
@@ -135,6 +136,35 @@ DASHBOARD_HTML = """
       background: linear-gradient(90deg, #b42318, #f59e0b, #0f766e);
       transition: width 180ms ease;
     }
+    .strategy-hero {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .recommendation {
+      border: 1px solid #263241;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 16px;
+    }
+    .recommendation span {
+      color: #94a3b8;
+      display: block;
+      font-size: 12px;
+    }
+    .recommendation strong {
+      display: block;
+      font-size: 34px;
+      margin: 8px 0 6px;
+    }
+    .reason-list {
+      margin: 12px 0 0;
+      padding-left: 18px;
+      color: #cbd5e1;
+    }
+    .reason-list li { margin: 5px 0; }
     .chart-wrap {
       height: 390px;
       margin-top: 14px;
@@ -263,6 +293,7 @@ DASHBOARD_HTML = """
     .error { color: var(--accent-2); font-weight: 700; }
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
+      .strategy-hero { grid-template-columns: 1fr; }
       .chart-wrap { height: 320px; }
       .real-chart-wrap { height: 360px; }
     }
@@ -278,28 +309,58 @@ DASHBOARD_HTML = """
   </header>
   <main>
     <section>
-      <h2>Mantle AI Trading Cockpit</h2>
+      <h2>Strategy Cockpit</h2>
       <p>
-        Mantle Sepolia connectivity, live market reference, paper execution,
-        risk controls, and auditable strategy decisions.
+        Choose a strategy, monitor the active paper position, and track whether
+        the setup is working.
       </p>
-      <div class="hero-grid">
-        <div class="hero-card">
-          <span>Network</span>
-          <strong id="heroNetwork">Mantle Sepolia</strong>
+      <div class="strategy-hero">
+        <div>
+          <div class="grid">
+            <label>Strategy
+              <select id="primaryStrategy">
+                <option value="momentum_breakout">Momentum Breakout</option>
+                <option value="mean_reversion">Mean Reversion</option>
+                <option value="liquidity_surge">Liquidity Surge</option>
+              </select>
+            </label>
+            <label>Position size
+              <input id="heroNotionalUsd" type="number" value="1000" min="1" />
+            </label>
+            <label>Action
+              <button id="heroStartTrade">Start Paper Trade</button>
+            </label>
+          </div>
+          <div class="status-line">
+            <span class="pill" id="dataFreshness">Data: Mantle Sepolia live</span>
+            <span class="pill">Execution: paper only</span>
+          </div>
         </div>
-        <div class="hero-card">
-          <span>Latest Block</span>
-          <strong id="heroBlock">Checking...</strong>
-        </div>
-        <div class="hero-card">
-          <span>Alpha Signal</span>
+        <div class="recommendation">
+          <span>Current recommendation</span>
           <strong id="heroSignal">Pending</strong>
           <div class="signal-bar"><div id="heroSignalBar"></div></div>
+          <ul class="reason-list" id="recommendationReasons">
+            <li>Waiting for market data.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="hero-grid">
+        <div class="hero-card">
+          <span>Active Position</span>
+          <strong id="heroPosition">No position</strong>
         </div>
         <div class="hero-card">
-          <span>Risk Mode</span>
-          <strong>Paper only</strong>
+          <span>Unrealized PnL</span>
+          <strong id="heroPnl">$0</strong>
+        </div>
+        <div class="hero-card">
+          <span>TP / SL</span>
+          <strong id="heroTpSl">-</strong>
+        </div>
+        <div class="hero-card">
+          <span>Data Freshness</span>
+          <strong id="heroBlock">Checking...</strong>
         </div>
       </div>
     </section>
@@ -539,6 +600,26 @@ DASHBOARD_HTML = """
     let liveTick = 0;
     let mantleStatus = null;
     let auditLog = [];
+    const strategyProfiles = {
+      momentum_breakout: {
+        label: "Momentum Breakout",
+        good: "Long only when trend and volume expand together.",
+        watch: "Wait for breakout confirmation before adding risk.",
+        risk: "Stand down when momentum fades or position risk is already high."
+      },
+      mean_reversion: {
+        label: "Mean Reversion",
+        good: "Look for a controlled long after a sharp pullback.",
+        watch: "Wait for price to stretch away from the recent range.",
+        risk: "Avoid fading the move while volatility is expanding."
+      },
+      liquidity_surge: {
+        label: "Liquidity Surge",
+        good: "Follow pairs where depth and activity support execution.",
+        watch: "Liquidity is acceptable, but confirmation is not strong yet.",
+        risk: "Do not add exposure when liquidity or freshness is weak."
+      }
+    };
 
     function tradingViewUrl(symbol) {
       return "https://www.tradingview.com/widgetembed/?" + new URLSearchParams({
@@ -575,6 +656,7 @@ DASHBOARD_HTML = """
     function alphaSignal() {
       const last = activeCandles[activeCandles.length - 1];
       const previous = activeCandles[activeCandles.length - 5] || activeCandles[0];
+      const strategy = document.getElementById("primaryStrategy").value;
       const momentumPct = ((last.close - previous.close) / previous.close) * 100;
       const volumeAvg = activeCandles.reduce((sum, candle) => sum + (candle.volume || 0), 0) /
         activeCandles.length;
@@ -584,10 +666,15 @@ DASHBOARD_HTML = """
         : 62;
       const riskPenalty = paperPositions.length > 2 ? 18 : paperPositions.length * 6;
       const freshness = mantleStatus ? 92 : 70;
-      const rawScore = momentumPct * 4
-        + volumeSpike * 0.2
-        + liquidityScore * 0.25
-        + freshness * 0.2
+      const strategyWeights = {
+        momentum_breakout: { momentum: 4, volume: 0.2, liquidity: 0.25, freshness: 0.2 },
+        mean_reversion: { momentum: -2.5, volume: 0.12, liquidity: 0.35, freshness: 0.25 },
+        liquidity_surge: { momentum: 2, volume: 0.25, liquidity: 0.45, freshness: 0.25 }
+      }[strategy];
+      const rawScore = momentumPct * strategyWeights.momentum
+        + volumeSpike * strategyWeights.volume
+        + liquidityScore * strategyWeights.liquidity
+        + freshness * strategyWeights.freshness
         - riskPenalty;
       const score = Math.max(
         Math.min(rawScore, 100),
@@ -596,14 +683,24 @@ DASHBOARD_HTML = """
       let decision = "WATCH";
       if (score >= 70) decision = "LONG BIAS";
       else if (score <= 35) decision = "RISK OFF";
+      const profile = strategyProfiles[strategy];
+      const reasons = [
+        profile[decision === "LONG BIAS" ? "good" : decision === "RISK OFF" ? "risk" : "watch"],
+        `Momentum is ${money(momentumPct)}% over the recent candle window.`,
+        `Volume is ${money(volumeSpike)}% of its local average.`,
+        `Open paper positions add a ${money(riskPenalty)} point risk adjustment.`
+      ];
       return {
         score,
         decision,
+        strategy,
+        strategyLabel: profile.label,
         momentumPct,
         volumeSpike,
         liquidityScore,
         freshness,
-        riskPenalty
+        riskPenalty,
+        reasons
       };
     }
 
@@ -612,7 +709,10 @@ DASHBOARD_HTML = """
       document.getElementById("heroSignal").textContent =
         `${signal.decision} ${money(signal.score)}`;
       document.getElementById("heroSignalBar").style.width = `${signal.score}%`;
+      document.getElementById("recommendationReasons").innerHTML =
+        signal.reasons.map((reason) => `<li>${reason}</li>`).join("");
       document.getElementById("alphaMetrics").innerHTML = [
+        metric("Strategy", signal.strategyLabel),
         metric("Decision", signal.decision),
         metric("Score", money(signal.score)),
         metric("Momentum", `${money(signal.momentumPct)}%`),
@@ -950,6 +1050,14 @@ DASHBOARD_HTML = """
         0
       );
       const active = paperPositions[paperPositions.length - 1];
+      document.getElementById("heroPosition").textContent = active
+        ? `${active.side.replace("paper-", "").toUpperCase()} ${active.pair}`
+        : "No position";
+      document.getElementById("heroPnl").textContent = `$${money(totalPnl)}`;
+      document.getElementById("heroPnl").style.color = totalPnl >= 0 ? "#0f766e" : "#b42318";
+      document.getElementById("heroTpSl").textContent = active
+        ? `$${money(active.take_profit)} / $${money(active.stop_loss)}`
+        : "-";
       strip.innerHTML = [
         positionTile("Position", active ? active.pair : "No active position"),
         positionTile("Mark", `$${money(markPrice)}`),
@@ -1033,8 +1141,8 @@ DASHBOARD_HTML = """
       try {
         const payload = await getJson("/api/v1/chains/mantle-sepolia/status");
         mantleStatus = payload;
-        document.getElementById("heroNetwork").textContent = payload.name;
-        document.getElementById("heroBlock").textContent = payload.latest_block;
+        document.getElementById("dataFreshness").textContent = `Data: ${payload.name} live`;
+        document.getElementById("heroBlock").textContent = `Block ${payload.latest_block}`;
         metrics.innerHTML = [
           metric("Network", payload.name),
           metric("Chain ID", payload.chain_id),
@@ -1098,6 +1206,18 @@ DASHBOARD_HTML = """
     document.getElementById("loadPair").addEventListener("click", loadPair);
     document.getElementById("runBacktest").addEventListener("click", runBacktest);
     document.getElementById("startPaperTrade").addEventListener("click", startPaperTrade);
+    document.getElementById("heroStartTrade").addEventListener("click", () => {
+      const signal = alphaSignal();
+      document.getElementById("notionalUsd").value =
+        document.getElementById("heroNotionalUsd").value;
+      document.getElementById("tradeSide").value =
+        signal.decision === "RISK OFF" ? "watch" : "paper-buy";
+      startPaperTrade();
+    });
+    document.getElementById("primaryStrategy").addEventListener("change", () => {
+      const signal = renderAlphaSignal();
+      addAudit("Strategy selected", signal.strategyLabel, signal);
+    });
     document.getElementById("checkMantle").addEventListener("click", checkMantle);
     document.getElementById("checkMantleBalance").addEventListener("click", checkMantleBalance);
     document.getElementById("realChartPreset").addEventListener("change", (event) => {
