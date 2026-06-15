@@ -203,16 +203,6 @@ DASHBOARD_HTML = """
       color: #cbd5e1;
     }
     .reason-list li { margin: 5px 0; }
-    .chart-wrap {
-      height: 390px;
-      margin-top: 14px;
-      border: 1px solid #263241;
-      border-radius: 8px;
-      background: #0b1118;
-      padding: 0;
-      position: relative;
-      overflow: hidden;
-    }
     .real-chart-wrap {
       height: 430px;
       margin-top: 14px;
@@ -225,32 +215,6 @@ DASHBOARD_HTML = """
       width: 100%;
       height: 100%;
       border: 0;
-      display: block;
-    }
-    .chart-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-height: 38px;
-      padding: 8px 10px;
-      border-bottom: 1px solid #263241;
-      color: #cbd5e1;
-      font-size: 12px;
-    }
-    .chart-toolbar strong {
-      color: #f8fafc;
-      font-size: 13px;
-    }
-    .chart-badge {
-      border: 1px solid #334155;
-      border-radius: 999px;
-      padding: 4px 8px;
-      background: #111827;
-    }
-    canvas {
-      width: 100%;
-      height: calc(100% - 38px);
       display: block;
     }
     .status-line {
@@ -332,7 +296,6 @@ DASHBOARD_HTML = """
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
       .strategy-hero { grid-template-columns: 1fr; }
-      .chart-wrap { height: 320px; }
       .real-chart-wrap { height: 360px; }
     }
   </style>
@@ -409,7 +372,7 @@ DASHBOARD_HTML = """
           <strong id="heroPosition">No position</strong>
         </div>
         <div class="hero-card">
-          <span>Unrealized PnL</span>
+          <span>Simulated PnL</span>
           <strong id="heroPnl">$0</strong>
         </div>
         <div class="hero-card">
@@ -427,7 +390,10 @@ DASHBOARD_HTML = """
       <div class="stack">
         <section>
           <h2>Market Watch</h2>
-          <p>DexScreener live pair data with a local fixture price path for strategy preview.</p>
+          <p>
+            TradingView is the visual market reference. Paper positions use a
+            simulated mark price until live OHLCV wiring is added.
+          </p>
           <div class="grid">
             <label>Preset pair
               <select id="pairPreset"></select>
@@ -461,13 +427,6 @@ DASHBOARD_HTML = """
               loading="lazy"
               src="https://www.tradingview.com/widgetembed/?symbol=BYBIT%3AMNTUSDT&interval=60&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&saveimage=0"
             ></iframe>
-          </div>
-          <div class="chart-wrap">
-            <div class="chart-toolbar">
-              <strong id="chartTitle">MNT/USDT - Local Position Map</strong>
-              <span class="chart-badge">Paper TP/SL overlay</span>
-            </div>
-            <canvas id="priceChart" width="900" height="330"></canvas>
           </div>
           <div class="position-strip" id="activePositionStrip"></div>
           <div class="metrics" id="pairMetrics"></div>
@@ -581,7 +540,7 @@ DASHBOARD_HTML = """
                 <th>Side</th>
                 <th>Pair</th>
                 <th>Entry</th>
-                <th>Mark</th>
+                <th>Sim Mark</th>
                 <th>PnL</th>
               </tr>
             </thead>
@@ -810,145 +769,6 @@ DASHBOARD_HTML = """
       }
     }
 
-    function drawChart(candles, trades = [], positions = paperPositions) {
-      const canvas = document.getElementById("priceChart");
-      const ctx = canvas.getContext("2d");
-      const width = canvas.width;
-      const height = canvas.height;
-      const pricePadLeft = 42;
-      const pricePadRight = 76;
-      const pricePadTop = 22;
-      const pricePadBottom = 86;
-      const volumeHeight = 54;
-      const plotWidth = width - pricePadLeft - pricePadRight;
-      const plotHeight = height - pricePadTop - pricePadBottom;
-      const positionPrices = positions.flatMap((position) => [
-        position.entry_price,
-        position.take_profit,
-        position.stop_loss
-      ]);
-      const highs = candles.map((candle) => candle.high).concat(positionPrices);
-      const lows = candles.map((candle) => candle.low).concat(positionPrices);
-      const volumes = candles.map((candle) => candle.volume || 0);
-      const rawMin = Math.min(...lows);
-      const rawMax = Math.max(...highs);
-      const rawRange = Math.max(rawMax - rawMin, rawMax * 0.018, 0.01);
-      const min = rawMin - rawRange * 0.55;
-      const max = rawMax + rawRange * 0.55;
-      const maxVolume = Math.max(...volumes, 1);
-      const range = Math.max(max - min, 1);
-      const candleSlot = plotWidth / candles.length;
-      const bodyWidth = Math.max(Math.min(candleSlot * 0.58, 18), 6);
-
-      ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = "#0b1118";
-      ctx.fillRect(0, 0, width, height);
-      ctx.strokeStyle = "#1f2937";
-      ctx.lineWidth = 1;
-
-      for (let index = 0; index < 5; index += 1) {
-        const y = pricePadTop + (plotHeight / 4) * index;
-        ctx.beginPath();
-        ctx.moveTo(pricePadLeft, y);
-        ctx.lineTo(width - pricePadRight + 12, y);
-        ctx.stroke();
-        const price = max - (range / 4) * index;
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = "11px Arial";
-        ctx.fillText(money(price), width - pricePadRight + 20, y + 4);
-      }
-
-      const pointFor = (candle, index) => {
-        const x = pricePadLeft + candleSlot * index + candleSlot / 2;
-        const y = pricePadTop + ((max - candle.close) / range) * plotHeight;
-        return { x, y };
-      };
-      const yForPrice = (price) => pricePadTop + ((max - price) / range) * plotHeight;
-
-      const drawPriceLine = (price, label, color) => {
-        const y = yForPrice(price);
-        if (y < pricePadTop - 8 || y > pricePadTop + plotHeight + 8) return;
-        ctx.strokeStyle = color;
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(pricePadLeft, y);
-        ctx.lineTo(width - pricePadRight + 12, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = color;
-        ctx.fillRect(width - pricePadRight + 15, y - 10, 58, 20);
-        ctx.fillStyle = "#0b1118";
-        ctx.font = "11px Arial";
-        ctx.fillText(label, width - pricePadRight + 20, y + 4);
-      };
-
-      candles.forEach((candle, index) => {
-        const point = pointFor(candle, index);
-        const openY = yForPrice(candle.open);
-        const closeY = yForPrice(candle.close);
-        const highY = yForPrice(candle.high);
-        const lowY = yForPrice(candle.low);
-        const isUp = candle.close >= candle.open;
-        const color = isUp ? "#22ab94" : "#f23645";
-        const volumeTop = height - 24 - ((candle.volume || 0) / maxVolume) * volumeHeight;
-
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-        ctx.globalAlpha = 0.35;
-        ctx.fillRect(
-          point.x - bodyWidth / 2,
-          volumeTop,
-          bodyWidth,
-          height - 24 - volumeTop
-        );
-        ctx.globalAlpha = 1;
-
-        ctx.beginPath();
-        ctx.moveTo(point.x, highY);
-        ctx.lineTo(point.x, lowY);
-        ctx.stroke();
-
-        ctx.fillRect(
-          point.x - bodyWidth / 2,
-          Math.min(openY, closeY),
-          bodyWidth,
-          Math.max(Math.abs(closeY - openY), 2)
-        );
-
-        if (index % 2 === 0 || index === candles.length - 1) {
-          ctx.fillStyle = "#64748b";
-          ctx.font = "11px Arial";
-          ctx.fillText(String(candle.timestamp), point.x - 4, height - 8);
-        }
-      });
-
-      const last = candles[candles.length - 1];
-      const lastY = yForPrice(last.close);
-      positions.forEach((position) => {
-        drawPriceLine(position.take_profit, "TP", "#22ab94");
-        drawPriceLine(position.entry_price, "ENTRY", "#3b82f6");
-        drawPriceLine(position.stop_loss, "SL", "#f23645");
-      });
-      drawPriceLine(last.close, money(last.close), "#f59e0b");
-
-      ctx.fillStyle = "#cbd5e1";
-      ctx.font = "12px Arial";
-      ctx.fillText("MNT/USDT 1H - live forming candle", pricePadLeft, 17);
-
-      trades.forEach((trade) => {
-        const index = candles.findIndex((candle) => candle.timestamp === trade.timestamp);
-        if (index < 0) return;
-        const point = pointFor(candles[index], index);
-        ctx.fillStyle = trade.action === "buy" ? "#3b82f6" : "#ef4444";
-        ctx.beginPath();
-        ctx.arc(point.x, point.y - 16, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#e5e7eb";
-        ctx.font = "10px Arial";
-        ctx.fillText(trade.action.toUpperCase(), point.x - 10, point.y - 24);
-      });
-    }
-
     async function postJson(path, body) {
       const response = await fetch(path, {
         method: "POST",
@@ -978,8 +798,6 @@ DASHBOARD_HTML = """
         latestPair = payload;
         document.getElementById("selectedPair").textContent =
           `${payload.base_token.symbol}/${payload.quote_token.symbol}`;
-        document.getElementById("chartTitle").textContent =
-          `${payload.base_token.symbol}/${payload.quote_token.symbol} - 1H`;
         document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString();
         metrics.innerHTML = [
           metric("Pair", `${payload.base_token.symbol}/${payload.quote_token.symbol}`),
@@ -995,7 +813,6 @@ DASHBOARD_HTML = """
         ].join("");
         renderPaperPositions();
         renderAlphaSignal();
-        drawChart(fixtureCandles);
         showRaw(payload);
       } catch (error) {
         metrics.innerHTML = `<span class="error">${JSON.stringify(error)}</span>`;
@@ -1034,7 +851,6 @@ DASHBOARD_HTML = """
           </tr>
         `).join("");
         addAudit("Backtest", `${payload.metrics.trades_count} trades generated`);
-        drawChart(activeCandles, payload.trades);
         showRaw(payload);
       } catch (error) {
         metrics.innerHTML = `<span class="error">${JSON.stringify(error)}</span>`;
@@ -1082,7 +898,6 @@ DASHBOARD_HTML = """
         `${side.replace("paper-", "").toUpperCase()} ${pair} @ ${money(entryPrice)}`,
         signal
       );
-      drawChart(activeCandles);
       document.getElementById("tradeIntent").innerHTML = [
         metric("Mode", "Paper only"),
         metric("Intent", intent.status),
@@ -1118,7 +933,7 @@ DASHBOARD_HTML = """
         : "-";
       strip.innerHTML = [
         positionTile("Position", active ? active.pair : "No active position"),
-        positionTile("Mark", `$${money(markPrice)}`),
+        positionTile("Sim Mark", `$${money(markPrice)}`),
         positionTile("Unrealized PnL", `$${money(totalPnl)}`, totalPnl >= 0),
         positionTile(
           "TP / SL",
@@ -1175,7 +990,7 @@ DASHBOARD_HTML = """
       });
     }
 
-    function tickChart() {
+    function tickPaperMark() {
       const last = activeCandles[activeCandles.length - 1];
       const direction = Math.sin(liveTick / 2) * 0.006 + (Math.random() - 0.5) * 0.004;
       const close = Math.max(last.close * (1 + direction), 0.0001);
@@ -1190,7 +1005,6 @@ DASHBOARD_HTML = """
       liveTick += 1;
       renderPaperPositions();
       renderAlphaSignal();
-      drawChart(activeCandles);
     }
 
     async function checkMantle() {
@@ -1253,10 +1067,7 @@ DASHBOARD_HTML = """
             quote_token: { symbol: "USDT" },
             price_usd: activeCandles[activeCandles.length - 1].close
           };
-          document.getElementById("chartTitle").textContent =
-            `${preset.asset} - Local Position Map`;
           renderPaperPositions();
-          drawChart(activeCandles);
         }
       });
     }
@@ -1287,13 +1098,12 @@ DASHBOARD_HTML = """
     document.getElementById("chainSlug").value = pairPresets[0].chainSlug;
     document.getElementById("pairAddress").value = pairPresets[0].pairAddress;
     document.getElementById("selectedPair").textContent = pairPresets[0].asset;
-    drawChart(activeCandles);
     renderPaperPositions();
     renderAlphaSignal();
     renderAuditLog();
     runBacktest();
     checkMantle();
-    setInterval(tickChart, 2500);
+    setInterval(tickPaperMark, 2500);
   </script>
 </body>
 </html>

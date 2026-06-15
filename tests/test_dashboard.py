@@ -16,7 +16,7 @@ def test_dashboard_renders_local_demo_page() -> None:
     assert "Market Watch" in response.text
     assert "Current recommendation" in response.text
     assert "Active Position" in response.text
-    assert "Unrealized PnL" in response.text
+    assert "Simulated PnL" in response.text
     assert "TP / SL" in response.text
     assert "Alpha Signal" in response.text
     assert "Strategy Audit Log" in response.text
@@ -26,12 +26,8 @@ def test_dashboard_renders_local_demo_page() -> None:
     assert "MNT/USDT" in response.text
     assert "TradingView real market chart" in response.text
     assert "realChartFrame" in response.text
-    assert "Paper TP/SL overlay" in response.text
-    assert "live forming candle" in response.text
     assert "Take profit %" in response.text
     assert "Stop loss %" in response.text
     assert "activePositionStrip" in response.text
-    assert "priceChart" in response.text
-    assert "Paper TP/SL overlay" in response.text
     assert "/api/v1/market-data/pair" in response.text
     assert "/api/v1/backtests/run" in response.text
