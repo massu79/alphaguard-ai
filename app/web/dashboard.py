@@ -42,6 +42,44 @@ DASHBOARD_HTML = """
       background: var(--panel);
       padding: 20px 24px;
     }
+    .product-head {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+    }
+    .product-head h1 {
+      font-size: 30px;
+      max-width: 820px;
+    }
+    .product-head p {
+      max-width: 760px;
+      font-size: 15px;
+    }
+    .capability-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .capability {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px 12px;
+      min-height: 68px;
+    }
+    .capability span {
+      color: var(--muted);
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .capability strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 15px;
+    }
     main {
       display: grid;
       gap: 18px;
@@ -301,18 +339,38 @@ DASHBOARD_HTML = """
 </head>
 <body>
   <header>
-    <h1>AlphaGuard AI Demo</h1>
-    <p>
-      Live market watch, strategy preview, paper-only trade intent,
-      and no-execution backtesting.
-    </p>
+    <div class="product-head">
+      <h1>MNT/USDT Paper-Trading Strategy Cockpit</h1>
+      <p>
+        Select an AI strategy, open a simulated position, watch live PnL with
+        TP/SL, and validate the same idea with a fixture backtest.
+      </p>
+      <div class="capability-strip">
+        <div class="capability">
+          <span>1. Strategy</span>
+          <strong>Choose Momentum, Reversion, or Liquidity</strong>
+        </div>
+        <div class="capability">
+          <span>2. Trade</span>
+          <strong>Start paper-only MNT/USDT exposure</strong>
+        </div>
+        <div class="capability">
+          <span>3. Monitor</span>
+          <strong>Track PnL, entry, TP, and SL live</strong>
+        </div>
+        <div class="capability">
+          <span>4. Validate</span>
+          <strong>Run a no-execution backtest</strong>
+        </div>
+      </div>
+    </div>
   </header>
   <main>
     <section>
-      <h2>Strategy Cockpit</h2>
+      <h2>Trade Setup</h2>
       <p>
-        Choose a strategy, monitor the active paper position, and track whether
-        the setup is working.
+        MNT/USDT is the demo pair. The app opens local paper positions only;
+        no wallet signing or real execution is enabled.
       </p>
       <div class="strategy-hero">
         <div>
@@ -328,7 +386,7 @@ DASHBOARD_HTML = """
               <input id="heroNotionalUsd" type="number" value="1000" min="1" />
             </label>
             <label>Action
-              <button id="heroStartTrade">Start Paper Trade</button>
+              <button id="heroStartTrade">Start MNT/USDT Paper Trade</button>
             </label>
           </div>
           <div class="status-line">

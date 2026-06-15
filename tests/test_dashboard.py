@@ -10,7 +10,9 @@ def test_dashboard_renders_local_demo_page() -> None:
 
     assert response.status_code == 200
     assert "AlphaGuard AI Demo" in response.text
-    assert "Strategy Cockpit" in response.text
+    assert "MNT/USDT Paper-Trading Strategy Cockpit" in response.text
+    assert "Trade Setup" in response.text
+    assert "Start MNT/USDT Paper Trade" in response.text
     assert "Market Watch" in response.text
     assert "Current recommendation" in response.text
     assert "Active Position" in response.text
